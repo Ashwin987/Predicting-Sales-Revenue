@@ -1,0 +1,429 @@
+---
+title: "412 Project"
+author: "Ashwin"
+date: "2025-11-25"
+output: html_document
+---
+
+```{r}
+
+# Install if needed:
+# install.packages(c("tidyverse", "caret", "glmnet", "pls"))
+
+library(tidyverse)
+library(caret)
+library(glmnet)
+library(pls)
+
+set.seed(123)  # for reproducibility
+
+
+
+```
+
+```{r}
+
+setwd("C:/UCLA/412/Project")
+
+# Load data
+df <- read.csv("realistic_linear_regression_dataset.csv")
+
+# Quick checks
+head(df)
+str(df)
+summary(df)
+
+colnames(df)
+```
+
+```{r}
+library(dplyr)
+# Convert character → factor
+df <- df %>% mutate(across(where(is.character), as.factor))
+
+# Remove missing values
+df <- na.omit(df)
+
+# Response
+y <- df$SalesRevenue
+
+# Predictors (WORKING FIX)
+X <- df[, setdiff(names(df), "SalesRevenue")]
+
+
+
+```
+
+```{r}
+# ============================
+# 2. Histograms for Numerics
+# ============================
+
+numeric_cols <- c("ProductionCost", "MarketingSpend", "SeasonalDemandIndex",
+                  "CompetitorPrice", "CustomerRating", "EconomicIndex",
+                  "StoreCount", "SalesRevenue")
+
+par(mfrow = c(2, 2))
+for(col in numeric_cols){
+  hist(df[[col]], main = paste("Histogram of", col),
+       xlab = col, col = "skyblue", border = "white")
+}
+par(mfrow = c(1,1))
+
+
+# ============================
+# 3. Density Plots
+# ============================
+
+par(mfrow = c(2, 2))
+for(col in numeric_cols){
+  plot(density(df[[col]]), main = paste("Density of", col),
+       xlab = col, lwd = 2)
+}
+par(mfrow = c(1,1))
+
+
+# ============================
+# 4. Boxplots (optional)
+# ============================
+
+par(mfrow = c(2, 2))
+for(col in numeric_cols){
+  boxplot(df[[col]], main = paste("Boxplot of", col), col = "orange")
+}
+par(mfrow = c(1,1))
+
+
+# ============================
+# 5. Bar plots for categorical variables
+# ============================
+
+cat_cols <- c("ProductCategory", "Region", "CustomerSegment", "IsPromotionApplied")
+
+par(mfrow = c(2, 2))
+for(col in cat_cols){
+  barplot(table(df[[col]]),
+          main = paste("Count of", col),
+          col = "lightgreen",
+          las = 2)
+}
+par(mfrow = c(1,1))
+
+
+# ============================
+# 6. Correlation Matrix Heatmap
+# ============================
+
+library(corrplot)
+
+corr_matrix <- cor(df[numeric_cols])
+corrplot(corr_matrix, method = "color", type = "upper",
+         tl.col = "black", tl.srt = 45)
+
+
+# ============================
+# 7. Scatterplots vs SalesRevenue
+# ============================
+
+par(mfrow = c(3, 3))
+for(col in numeric_cols[numeric_cols != "SalesRevenue"]){
+  plot(df[[col]], df$SalesRevenue,
+       xlab = col, ylab = "SalesRevenue",
+       main = paste(col, "vs SalesRevenue"),
+       pch = 19, col = "darkblue")
+}
+par(mfrow = c(1,1))
+
+```
+
+```{r}
+plot(df$MarketingSpend,
+     df$SalesRevenue,
+     main = "Marketing Spend vs Sales Revenue",
+     xlab = "Marketing Spend",
+     ylab = "Sales Revenue",
+     pch = 19, col = "blue")
+
+```
+
+```{r}
+plot(df$ProductionCost,
+     df$SalesRevenue,
+     main = "Production Cost vs Sales Revenue",
+     xlab = "Production Cost",
+     ylab = "Sales Revenue",
+     pch = 19, 
+     col = "darkgreen")
+
+plot(df$CompetitorPrice,
+     df$SalesRevenue,
+     main = "Competitor Price vs Sales Revenue",
+     xlab = "Competitor Price",
+     ylab = "Sales Revenue",
+     pch = 19, 
+     col = "red")
+
+
+
+```
+```{r}
+library(dplyr)
+library(corrplot)
+
+# Select numeric columns
+numeric_df <- df %>% 
+  dplyr::select(where(is.numeric))
+
+# Correlation matrix
+cor_matrix <- cor(numeric_df, use = "complete.obs")
+
+# Custom palette based on your slide gradient
+slide_colors <- c("#000000", "lightslateblue", "steelblue", "#00D9FF")
+custom_palette <- colorRampPalette(slide_colors)
+
+# Plot
+corrplot(
+  cor_matrix,
+  method = "color",
+  type = "upper",
+  col = custom_palette(100),
+  tl.col = "black",
+  addCoef.col = "black",
+  tl.srt = 45,
+  number.cex = 0.7,
+  tl.cex = 0.8
+)
+
+
+```
+```{r}
+
+model <- lm(SalesRevenue ~ ., data = df)
+
+v <- vif(model)
+
+# Extract only the GVIF^(1/(2*Df)) column
+vif_simple <- v[, "GVIF^(1/(2*Df))"]
+
+vif_simple
+
+
+
+```
+
+
+
+
+
+```{r}
+# Log transform some variables
+df$log_ProductionCost <- log(df$ProductionCost + 1)
+df$log_MarketingSpend <- log(df$MarketingSpend + 1)
+df$log_SalesRevenue   <- log(df$SalesRevenue + 1)
+
+# Plot histograms
+library(ggplot2)
+
+ggplot(df, aes(x = log_SalesRevenue)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  labs(title = "Log-Transformed Sales Revenue Distribution", x = "log(SalesRevenue)")
+
+ggplot(df, aes(x = log_ProductionCost)) +
+  geom_histogram(bins = 30, fill = "orange", color = "black") +
+  labs(title = "Log-Transformed Production Cost Distribution", x = "log(ProductionCost)")
+
+ggplot(df, aes(x = log_MarketingSpend)) +
+  geom_histogram(bins = 30, fill = "purple", color = "black") +
+  labs(title = "Log-Transformed Marketing Spend Distribution", x = "log(MarketingSpend)")
+
+```
+
+```{r}
+# Sales vs Marketing Spend
+ggplot(df, aes(x = MarketingSpend, y = SalesRevenue)) +
+  geom_point(alpha = 0.5, color = "blue") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "Sales Revenue vs Marketing Spend")
+
+# Sales vs Production Cost
+ggplot(df, aes(x = ProductionCost, y = SalesRevenue)) +
+  geom_point(alpha = 0.5, color = "darkgreen") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "Sales Revenue vs Production Cost")
+
+# Sales vs Seasonal Demand Index
+ggplot(df, aes(x = SeasonalDemandIndex, y = SalesRevenue)) +
+  geom_point(alpha = 0.5, color = "purple") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "Sales Revenue vs Seasonal Demand Index")
+
+```
+```{r}
+# Product Category vs Sales
+ggplot(df, aes(x = ProductCategory, y = SalesRevenue)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Sales Revenue by Product Category")
+
+# Customer Segment vs Sales
+ggplot(df, aes(x = CustomerSegment, y = SalesRevenue)) +
+  geom_boxplot(fill = "lightgreen") +
+  labs(title = "Sales Revenue by Customer Segment")
+
+```
+```{r}
+library(ggplot2)
+
+ggplot(df, aes(x = log_ProductionCost, y = log_SalesRevenue)) +
+  geom_point(color = "orange", alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(
+    title = "Log Production Cost vs Log Sales Revenue",
+    x = "log(Production Cost)",
+    y = "log(Sales Revenue)"
+  )
+
+
+ggplot(df, aes(x = log_MarketingSpend, y = log_SalesRevenue)) +
+  geom_point(color = "purple", alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(
+    title = "Log Marketing Spend vs Log Sales Revenue",
+    x = "log(Marketing Spend)",
+    y = "log(Sales Revenue)"
+  )
+
+
+ggplot(df, aes(x = log_CompetitorPrice, y = log_SalesRevenue)) +
+  geom_point(color = "brown", alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(
+    title = "Log Competitor Price vs Log Sales Revenue",
+    x = "log(Competitor Price)",
+    y = "log(Sales Revenue)"
+  )
+
+
+```
+```{r}
+library(corrplot)
+
+# Select just numeric log columns
+cor_data <- df[, numeric_logs]
+
+# Compute correlation
+cor_matrix <- cor(cor_data)
+
+# Visualize
+corrplot(cor_matrix, method = "color",
+         type = "upper",
+         tl.col = "black",
+         addCoef.col = "black",
+         number.cex = 0.7)
+
+```
+
+
+
+```{r}
+# Create model matrix (needed for glmnet)
+X_mat <- model.matrix(SalesRevenue ~ ., data=df)[,-1]
+y_vec <- df$SalesRevenue
+
+```
+
+```{r}
+baseline_mod <- lm(SalesRevenue ~ ., data=df)
+summary(baseline_mod)
+
+```
+```{r}
+set.seed(123)
+train_control <- trainControl(method = "cv", number = 10)
+
+```
+
+```{r}
+set.seed(123)
+lasso_mod <- cv.glmnet(X_mat, y_vec, alpha = 1)
+
+# Best lambda
+lasso_mod$lambda.min
+
+# Coefficients
+coef(lasso_mod, s = "lambda.min")
+
+```
+```{r}
+set.seed(123)
+ridge_mod <- cv.glmnet(X_mat, y_vec, alpha = 0)
+
+ridge_mod$lambda.min
+coef(ridge_mod, s = "lambda.min")
+
+```
+```{r}
+set.seed(123)
+pcr_mod <- pcr(SalesRevenue ~ ., data=df, scale=TRUE, validation="CV")
+
+summary(pcr_mod)
+validationplot(pcr_mod, val.type="MSEP")
+
+```
+
+```{r}
+library(pls)
+
+pcr_mod <- pcr(
+  SalesRevenue ~ ., 
+  data = df,
+  scale = TRUE,
+  validation = "CV"
+)
+
+# Baseline RMSE
+baseline_rmme <- sqrt(mean(baseline_mod$residuals^2))
+
+# Lasso RMSE
+lasso_pred <- predict(lasso_mod, s = lasso_mod$lambda.min, newx = X_mat)
+lasso_rmse <- sqrt(mean((lasso_pred - y_vec)^2))
+
+# Ridge RMSE
+ridge_pred <- predict(ridge_mod, s = ridge_mod$lambda.min, newx = X_mat)
+ridge_rmse <- sqrt(mean((ridge_pred - y_vec)^2))
+
+# PCR RMSE — choose optimal # of comps
+best_ncomp <- which.min(pcr_mod$validation$PRESS)
+pcr_pred <- predict(pcr_mod, ncomp = best_ncomp, newdata = df)
+pcr_rmse <- sqrt(mean((pcr_pred - df$SalesRevenue)^2))
+
+# Combine
+rmse_table <- data.frame(
+  Model = c("Baseline", "Lasso", "Ridge", "PCR"),
+  RMSE = c(baseline_rmme, lasso_rmse, ridge_rmse, pcr_rmse)
+)
+
+rmse_table
+
+
+
+
+```
+
+```{r}
+library(caret)
+
+set.seed(123)
+
+train_control <- trainControl(method = "cv", number = 10)
+
+cv_model <- train(
+  SalesRevenue ~ .,
+  data = df,
+  method = "lm",
+  trControl = train_control
+)
+
+cv_model
+
+```
+
